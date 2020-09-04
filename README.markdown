@@ -4,7 +4,7 @@
 
 # ts-proto
 
-> `ts-proto` transforms your `.proto` files into strong typed `typescript` files!
+> `ts-proto` transforms your `.proto` files into strongly-typed, idiomatic TypeScript files!
 
 ## Table of contents
 
@@ -63,7 +63,7 @@ export interface PingService {
 }
 ```
 
-It will also generate client implementations of `PingService`, but currently only [Twirp](https://github.com/twitchtv/twirp) clients are supported (see [issue 2](https://github.com/stephenh/ts-proto/issues/2) for wider/native GRPC support).
+It will also generate client implementations of `PingService`; currently [Twirp](https://github.com/twitchtv/twirp), [grpc-web](./integration/grpc-web), and [nestjs](./NESTJS.markdown) are supported.
 
 # QuickStart
 
@@ -71,6 +71,7 @@ It will also generate client implementations of `PingService`, but currently onl
 - `protoc --plugin=./node_modules/.bin/protoc-gen-ts_proto --ts_proto_out=. ./simple.proto`
   - (Note that the output parameter name, `ts_proto_out`, is named based on the suffix of the plugin's name, i.e. "ts_proto" suffix in the `--plugin=./node_modules/.bin/protoc-gen-ts_proto` parameter becomes the `_out` prefix, per `protoc`'s CLI conventions.)
   - On Windows, use `protoc --plugin=protoc-gen-ts_proto=.\node_modules\.bin\protoc-gen-ts_proto.cmd --ts_proto_out=. ./imple.proto`
+  - Ensure you're using a modern `protoc`, i.e. the original `protoc` `3.0.0` doesn't support the `_opt` flag
 
 This will generate `*.ts` source files for the given `*.proto` types.
 
@@ -162,7 +163,9 @@ ts-proto also does not currently have any infrastructure to help implement the s
 
 # Auto-Batching / N+1 Prevention
 
-If you're using ts-proto's (currently Twirp only) clients to call backend micro-services, similar to the N+1 problem in SQL applications, it is easy for micro-service clients to (when serving an individual request) inadvertantly trigger multiple separate RPC calls for "get book 1", "get book 2", "get book 3", that should really be batched into a single "get books [1, 2, 3]" (assuming the backend supports a batch-oriented RPC method).
+(Note: this is currently only supported by the Twirp clients.)
+
+If you're using ts-proto's clients to call backend micro-services, similar to the N+1 problem in SQL applications, it is easy for micro-service clients to (when serving an individual request) inadvertantly trigger multiple separate RPC calls for "get book 1", "get book 2", "get book 3", that should really be batched into a single "get books [1, 2, 3]" (assuming the backend supports a batch-oriented RPC method).
 
 ts-proto can help with this, and essentially auto-batch your individual "get book" calls into batched "get books" calls.
 
@@ -232,6 +235,10 @@ protoc --plugin=node_modules/ts-proto/protoc-gen-ts_proto ./batching.proto -I.
 
   Eventually if TypesCript supports [Exact Types](https://github.com/microsoft/TypeScript/issues/12936), that should allow ts-proto to switch to `useOptionals=true` as the default/only behavior, have the generated `Message.encode`/`Message.toPartial`/etc. methods accept `Exact<T>` versions of the message types, and the result would be both safe + succinct.
 
+  Also see the comment in [this issue](https://github.com/stephenh/ts-proto/issues/120#issuecomment-678375833) which explains some of the nuance behind making all fields optional (currently `useOptionals` only makes message fields optional), specifically that a message created with `const message: Message = { ...key not set... }` vs. `const message = Message.decode(...key not set...)` would look different to clients.
+
+  (Also note that each message's `Message.fromPartial(...)` static methods are specifically meant to address this, because it allows you to create a message with all keys optional, but still applies the usual protobuf default-value-on-missing-key logic, so that code that reads the message get more consistent behavior.
+
 - With `--ts_proto_opt=oneof=unions`, `oneof` fields will be generated as ADTs.
 
   See the "OneOf Handling" section.
@@ -246,7 +253,13 @@ protoc --plugin=node_modules/ts-proto/protoc-gen-ts_proto ./batching.proto -I.
 
   This is also useful if you want "only types".
 
-- With `--ts_proto_opt=outputClientImpl=false`, the client implementations, i.e. `FooServiceClientImpl`, that implement the client-side (currently Twirp-only) RPC interfaces will not be output.
+- With `--ts_proto_opt=outputClientImpl=false`, the client implementations, i.e. `FooServiceClientImpl`, that implement the client-side (in Twirp, see next option for `grpc-web`) RPC interfaces will not be output.
+
+- With `--ts_proto_opt=outputClientImpl=grpc-web`, the client implementations, i.e. `FooServiceClientImpl`, will use the [@improbable-eng/grpc-web](https://github.com/improbable-eng/grpc-web) library at runtime to send grpc messages to a grpc-web backend.
+
+  (Note that this only uses the grpc-web runtime, you don't need to use any of their generated code, i.e. the ts-proto output replaces their `ts-protoc-gen` output.)
+
+  You'll need to add the `@improbable-eng/grpc-web` and a transport to your project's `package.json`; see the `integration/grpc-web` directory for a working example.
 
 - With `--ts_proto_opt=returnObservable=true`, the return type of service methods will be `Observable<T>` instead of `Promise<T>`.
 
@@ -276,6 +289,14 @@ If you're looking for `ts-proto` to generate only types for your Protobuf types 
 ### NestJS Support
 
 We have a great way of working together with [nestjs](https://docs.nestjs.com/microservices/grpc). `ts-proto` generates `interfaces` and `decorators` for you controller, client. For more information see the [nestjs readme](NESTJS.markdown).
+
+# Sponsors
+
+Kudos to our sponsors:
+
+* [ngrok](https://ngrok.com) funded ts-proto's initial grpc-web support.
+
+If you need ts-proto customizations or priority support for your company, you can ping me at [via email](mailto:stephen.haberman@gmail.com).
 
 # Building
 
