@@ -277,9 +277,9 @@ function addConfigureProtobuf(file: FileSpec, options: Options): FileSpec {
   }
   return file.addCode(
     CodeBlock.empty()
-      .beginControlFlow('if (%T.util.Long !== %T)', 'protobuf*protobufjs/minimal', 'Long*long')
-      .addStatement('%T.util.Long = %T', 'protobuf*protobufjs/minimal', 'Long*long')
-      .addStatement('%T.configure()', 'protobuf*protobufjs/minimal')
+      .beginControlFlow('if (%T.Long !== %T as any)', 'util@protobufjs/minimal', 'Long*long')
+      .addStatement('%T.Long = %T as any', 'util@protobufjs/minimal', 'Long*long')
+      .addStatement('%T()', 'configure@protobufjs/minimal')
       .endControlFlow()
   );
 }
