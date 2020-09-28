@@ -28,6 +28,13 @@ export interface PleaseChoose_Submessage {
   name: string;
 }
 
+/**
+ * * For testing proto3's field presence feature.  */
+export interface SimpleButOptional {
+  name?: string | undefined;
+  age?: number | undefined;
+}
+
 const basePleaseChoose: object = {
   name: "",
   age: 0,
@@ -35,6 +42,9 @@ const basePleaseChoose: object = {
 
 const basePleaseChoose_Submessage: object = {
   name: "",
+};
+
+const baseSimpleButOptional: object = {
 };
 
 export enum PleaseChoose_StateEnum {
@@ -78,32 +88,32 @@ export function pleaseChoose_StateEnumToJSON(object: PleaseChoose_StateEnum): st
 export const PleaseChoose = {
   encode(message: PleaseChoose, writer: Writer = Writer.create()): Writer {
     writer.uint32(10).string(message.name);
-    if (message.choice?.$case === 'aNumber' && message.choice?.aNumber !== 0) {
+    if (message.choice?.$case === 'aNumber') {
       writer.uint32(17).double(message.choice.aNumber);
     }
-    if (message.choice?.$case === 'aString' && message.choice?.aString !== "") {
+    if (message.choice?.$case === 'aString') {
       writer.uint32(26).string(message.choice.aString);
     }
-    if (message.choice?.$case === 'aMessage' && message.choice?.aMessage !== undefined) {
+    if (message.choice?.$case === 'aMessage') {
       PleaseChoose_Submessage.encode(message.choice.aMessage, writer.uint32(34).fork()).ldelim();
     }
-    if (message.choice?.$case === 'aBool' && message.choice?.aBool !== false) {
+    if (message.choice?.$case === 'aBool') {
       writer.uint32(48).bool(message.choice.aBool);
     }
-    if (message.choice?.$case === 'bunchaBytes' && message.choice?.bunchaBytes !== undefined) {
+    if (message.choice?.$case === 'bunchaBytes') {
       writer.uint32(82).bytes(message.choice.bunchaBytes);
     }
-    if (message.choice?.$case === 'anEnum' && message.choice?.anEnum !== 0) {
+    if (message.choice?.$case === 'anEnum') {
       writer.uint32(88).int32(message.choice.anEnum);
     }
     writer.uint32(40).uint32(message.age);
-    if (message.eitherOr?.$case === 'either' && message.eitherOr?.either !== "") {
+    if (message.eitherOr?.$case === 'either') {
       writer.uint32(58).string(message.eitherOr.either);
     }
-    if (message.eitherOr?.$case === 'or' && message.eitherOr?.or !== "") {
+    if (message.eitherOr?.$case === 'or') {
       writer.uint32(66).string(message.eitherOr.or);
     }
-    if (message.eitherOr?.$case === 'thirdOption' && message.eitherOr?.thirdOption !== "") {
+    if (message.eitherOr?.$case === 'thirdOption') {
       writer.uint32(74).string(message.eitherOr.thirdOption);
     }
     return writer;
@@ -231,17 +241,17 @@ export const PleaseChoose = {
   },
   toJSON(message: PleaseChoose): unknown {
     const obj: any = {};
-    obj.name = message.name || "";
-    obj.aNumber = message.choice?.$case === 'aNumber' && message.choice?.aNumber || undefined;
-    obj.aString = message.choice?.$case === 'aString' && message.choice?.aString || undefined;
-    obj.aMessage = message.choice?.$case === 'aMessage' && message.choice?.aMessage ? PleaseChoose_Submessage.toJSON(message.choice?.aMessage) : undefined;
-    obj.aBool = message.choice?.$case === 'aBool' && message.choice?.aBool || undefined;
-    obj.bunchaBytes = message.choice?.$case === 'bunchaBytes' && message.choice?.bunchaBytes !== undefined ? base64FromBytes(message.choice?.bunchaBytes) : undefined;
-    obj.anEnum = message.choice?.$case === 'anEnum' && message.choice?.anEnum !== undefined ? pleaseChoose_StateEnumToJSON(message.choice?.anEnum) : undefined;
-    obj.age = message.age || 0;
-    obj.either = message.eitherOr?.$case === 'either' && message.eitherOr?.either || undefined;
-    obj.or = message.eitherOr?.$case === 'or' && message.eitherOr?.or || undefined;
-    obj.thirdOption = message.eitherOr?.$case === 'thirdOption' && message.eitherOr?.thirdOption || undefined;
+    message.name !== undefined && (obj.name = message.name);
+    message.choice?.$case === 'aNumber' && (obj.aNumber = message.choice?.aNumber);
+    message.choice?.$case === 'aString' && (obj.aString = message.choice?.aString);
+    message.choice?.$case === 'aMessage' && (obj.aMessage = message.choice?.aMessage ? PleaseChoose_Submessage.toJSON(message.choice?.aMessage) : undefined);
+    message.choice?.$case === 'aBool' && (obj.aBool = message.choice?.aBool);
+    message.choice?.$case === 'bunchaBytes' && (obj.bunchaBytes = message.choice?.bunchaBytes !== undefined ? base64FromBytes(message.choice?.bunchaBytes) : undefined);
+    message.choice?.$case === 'anEnum' && (obj.anEnum = message.choice?.anEnum !== undefined ? pleaseChoose_StateEnumToJSON(message.choice?.anEnum) : undefined);
+    message.age !== undefined && (obj.age = message.age);
+    message.eitherOr?.$case === 'either' && (obj.either = message.eitherOr?.either);
+    message.eitherOr?.$case === 'or' && (obj.or = message.eitherOr?.or);
+    message.eitherOr?.$case === 'thirdOption' && (obj.thirdOption = message.eitherOr?.thirdOption);
     return obj;
   },
 };
@@ -284,7 +294,65 @@ export const PleaseChoose_Submessage = {
   },
   toJSON(message: PleaseChoose_Submessage): unknown {
     const obj: any = {};
-    obj.name = message.name || "";
+    message.name !== undefined && (obj.name = message.name);
+    return obj;
+  },
+};
+
+export const SimpleButOptional = {
+  encode(message: SimpleButOptional, writer: Writer = Writer.create()): Writer {
+    if (message.name !== undefined) {
+      writer.uint32(10).string(message.name);
+    }
+    if (message.age !== undefined) {
+      writer.uint32(16).int32(message.age);
+    }
+    return writer;
+  },
+  decode(input: Uint8Array | Reader, length?: number): SimpleButOptional {
+    const reader = input instanceof Uint8Array ? new Reader(input) : input;
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = { ...baseSimpleButOptional } as SimpleButOptional;
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          message.name = reader.string();
+          break;
+        case 2:
+          message.age = reader.int32();
+          break;
+        default:
+          reader.skipType(tag & 7);
+          break;
+      }
+    }
+    return message;
+  },
+  fromJSON(object: any): SimpleButOptional {
+    const message = { ...baseSimpleButOptional } as SimpleButOptional;
+    if (object.name !== undefined && object.name !== null) {
+      message.name = String(object.name);
+    }
+    if (object.age !== undefined && object.age !== null) {
+      message.age = Number(object.age);
+    }
+    return message;
+  },
+  fromPartial(object: DeepPartial<SimpleButOptional>): SimpleButOptional {
+    const message = { ...baseSimpleButOptional } as SimpleButOptional;
+    if (object.name !== undefined && object.name !== null) {
+      message.name = object.name;
+    }
+    if (object.age !== undefined && object.age !== null) {
+      message.age = object.age;
+    }
+    return message;
+  },
+  toJSON(message: SimpleButOptional): unknown {
+    const obj: any = {};
+    message.name !== undefined && (obj.name = message.name);
+    message.age !== undefined && (obj.age = message.age);
     return obj;
   },
 };

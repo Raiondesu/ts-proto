@@ -1,3 +1,28 @@
+
+## v1.35.1
+
+* Fix maps of enums (@ahmadj-levelbenefits)
+
+## v1.35.0
+
+* Fix proto3 optional support
+
+## v1.34.0
+
+* Fix `blob`s in `fromPartial` and `toJSON`
+
+## v1.33.0
+
+* Automatically configure `protobuf.util.Long` when 64-bit numbers are used (fixes #78)
+
+## v1.32.0
+
+* Add support for the experimental proto3 `optional` keyword
+
+## v1.31.0
+
+* Fix `oneof=unions` not decoding default values correctly (@philikon)
+
 ## v1.30.0
 
 * Accept cross-call metadata args in the `GrpcWebImpl` constructor

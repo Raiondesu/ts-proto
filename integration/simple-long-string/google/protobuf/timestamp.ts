@@ -1,5 +1,5 @@
 import * as Long from 'long';
-import { Writer, Reader } from 'protobufjs/minimal';
+import { Writer, Reader, util, configure } from 'protobufjs/minimal';
 
 
 /**
@@ -169,11 +169,16 @@ export const Timestamp = {
   },
   toJSON(message: Timestamp): unknown {
     const obj: any = {};
-    obj.seconds = message.seconds || "0";
-    obj.nanos = message.nanos || 0;
+    message.seconds !== undefined && (obj.seconds = message.seconds);
+    message.nanos !== undefined && (obj.nanos = message.nanos);
     return obj;
   },
 };
+
+if (util.Long !== Long as any) {
+  util.Long = Long as any;
+  configure();
+}
 
 type Builtin = Date | Function | Uint8Array | string | number | undefined;
 type DeepPartial<T> = T extends Builtin

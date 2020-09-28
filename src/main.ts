@@ -17,6 +17,7 @@ import {
   isTimestamp,
   isValueType,
   isWithinOneOf,
+  isWithinOneOfThatShouldBeUnion,
   packedType,
   toReaderCall,
   toTypeName,
@@ -244,7 +245,19 @@ export function generateFile(typeMap: TypeMap, fileDesc: FileDescriptorProto, pa
   return file;
 }
 
-function addLongUtilityMethod(file: FileSpec, options: Options): FileSpec {
+function addLongUtilityMethod(_file: FileSpec, options: Options): FileSpec {
+  // Regardless of which `forceLong` config option we're using, we always use
+  // the `long` library to either represent or at least sanity-check 64-bit values
+  const util = TypeNames.anyType('util@protobufjs/minimal');
+  const configure = TypeNames.anyType('configure@protobufjs/minimal');
+  let file = _file.addCode(
+    CodeBlock.empty()
+      .beginControlFlow('if (%T.Long !== %T as any)', util, 'Long*long')
+      .addStatement('%T.Long = %T as any', util, 'Long*long')
+      .addStatement('%T()', configure)
+      .endControlFlow()
+  );
+
   if (options.forceLong === LongOption.LONG) {
     return file.addFunction(
       FunctionSpec.create('numberToLong')
@@ -462,7 +475,7 @@ function generateEnumToJson(fullName: string, enumDesc: EnumDescriptorProto): Fu
 
 // When useOptionals=true, non-scalar fields are translated into optional properties.
 function isOptionalProperty(field: FieldDescriptorProto, options: Options): boolean {
-  return options.useOptionals && isMessage(field) && !isRepeated(field);
+  return (options.useOptionals && isMessage(field) && !isRepeated(field)) || field.proto3Optional;
 }
 
 // Create the interface with properties
@@ -480,7 +493,7 @@ function generateInterfaceDeclaration(
   messageDesc.field.forEach((fieldDesc, index) => {
     // When oneof=unions, we generate a single property with an algebraic
     // datatype (ADT) per `oneof` clause.
-    if (options.oneof === OneofOption.UNIONS && isWithinOneOf(fieldDesc)) {
+    if (isWithinOneOfThatShouldBeUnion(options, fieldDesc)) {
       const { oneofIndex } = fieldDesc;
       if (!processedOneofs.has(oneofIndex)) {
         processedOneofs.add(oneofIndex);
@@ -558,7 +571,7 @@ function generateBaseInstance(typeMap: TypeMap, fullName: string, messageDesc: D
     .filterNot(isWithinOneOf)
     .forEach((field) => {
       let val = defaultValue(typeMap, field, options);
-      if (val === 'undefined') {
+      if (val === 'undefined' || isBytes(field)) {
         return;
       }
       initialValue = initialValue.addHashEntry(maybeSnakeToCamel(field.name, options), val);
@@ -718,7 +731,7 @@ function generateDecode(
           .addStatement(`message.%L.push(%L)`, fieldName, readSnippet)
           .endControlFlow();
       }
-    } else if (isWithinOneOf(field) && options.oneof === OneofOption.UNIONS) {
+    } else if (isWithinOneOfThatShouldBeUnion(options, field)) {
       let oneofName = maybeSnakeToCamel(messageDesc.oneofDecl[field.oneofIndex].name, options);
       func = func.addStatement(`message.%L = {$case: '%L', %L: %L}`, oneofName, fieldName, fieldName, readSnippet);
     } else {
@@ -804,20 +817,19 @@ function generateEncode(
           .endControlFlow()
           .addStatement('writer.ldelim()');
       }
-    } else if (isWithinOneOf(field) && options.oneof === OneofOption.UNIONS) {
+    } else if (isWithinOneOfThatShouldBeUnion(options, field)) {
       let oneofName = maybeSnakeToCamel(messageDesc.oneofDecl[field.oneofIndex].name, options);
       func = func
-        .beginControlFlow(
-          `if (message.%L?.$case === '%L' && message.%L?.%L !== %L)`,
-          oneofName,
-          fieldName,
-          oneofName,
-          fieldName,
-          defaultValue(typeMap, field, options)
-        )
+        .beginControlFlow(`if (message.%L?.$case === '%L')`, oneofName, fieldName)
         .addStatement('%L', writeSnippet(`message.${oneofName}.${fieldName}`))
         .endControlFlow();
-    } else if (isWithinOneOf(field) || isMessage(field)) {
+    } else if (isWithinOneOf(field)) {
+      // Oneofs don't have a default value check b/c they need to denote which-oneof presence
+      func = func
+        .beginControlFlow('if (message.%L !== undefined)', fieldName)
+        .addStatement('%L', writeSnippet(`message.${fieldName}`))
+        .endControlFlow();
+    } else if (isMessage(field)) {
       func = func
         .beginControlFlow(
           'if (message.%L !== undefined && message.%L !== %L)',
@@ -899,10 +911,10 @@ function generateFromJson(
               } else {
                 return CodeBlock.of('bytesFromBase64(%L as string)', from);
               }
+            } else if (isEnum(valueType)) {
+              return CodeBlock.of('%L as number', from);
             } else {
-              const cstr = capitalize(
-                basicTypeName(typeMap, FieldDescriptorProto.create({ type: valueType.type }), options).toString()
-              );
+              const cstr = capitalize(basicTypeName(typeMap, valueType, options).toString());
               return CodeBlock.of('%L(%L)', cstr, from);
             }
           } else if (isTimestamp(valueType)) {
@@ -937,7 +949,7 @@ function generateFromJson(
           .addStatement(`message.%L.push(%L)`, fieldName, readSnippet('e'))
           .endControlFlow();
       }
-    } else if (isWithinOneOf(field) && options.oneof === OneofOption.UNIONS) {
+    } else if (isWithinOneOfThatShouldBeUnion(options, field)) {
       let oneofName = maybeSnakeToCamel(messageDesc.oneofDecl[field.oneofIndex].name, options);
       func = func.addStatement(
         `message.%L = {$case: '%L', %L: %L}`,
@@ -998,7 +1010,7 @@ function generateToJson(
         // For map types, drill-in and then admittedly re-hard-code our per-value-type logic
         const valueType = (typeMap.get(field.typeName)![2] as DescriptorProto).field[1];
         if (isEnum(valueType)) {
-          const toJson = getEnumMethod(typeMap, field.typeName, 'ToJSON');
+          const toJson = getEnumMethod(typeMap, valueType.typeName, 'ToJSON');
           return CodeBlock.of('%T(%L)', toJson, from);
         } else if (isBytes(valueType)) {
           return CodeBlock.of('base64FromBytes(%L)', from);
@@ -1018,12 +1030,16 @@ function generateToJson(
           defaultValue(typeMap, field, options)
         );
       } else if (isBytes(field)) {
-        return CodeBlock.of(
-          '%L !== undefined ? base64FromBytes(%L) : %L',
-          from,
-          from,
-          isWithinOneOf(field) ? 'undefined' : defaultValue(typeMap, field, options)
-        );
+        if (isWithinOneOf(field)) {
+          return CodeBlock.of('%L !== undefined ? base64FromBytes(%L) : undefined', from, from);
+        } else {
+          return CodeBlock.of(
+            'base64FromBytes(%L !== undefined ? %L : %L)',
+            from,
+            from,
+            defaultValue(typeMap, field, options)
+          );
+        }
       } else if (isLong(field) && options.forceLong === LongOption.LONG) {
         return CodeBlock.of(
           '(%L || %L).toString()',
@@ -1031,11 +1047,7 @@ function generateToJson(
           isWithinOneOf(field) ? 'undefined' : defaultValue(typeMap, field, options)
         );
       } else {
-        return CodeBlock.of(
-          '%L || %L',
-          from,
-          isWithinOneOf(field) ? 'undefined' : defaultValue(typeMap, field, options)
-        );
+        return CodeBlock.of('%L', from);
       }
     };
 
@@ -1056,18 +1068,23 @@ function generateToJson(
         .nextControlFlow('else')
         .addStatement('obj.%L = []', fieldName)
         .endControlFlow();
-    } else if (isWithinOneOf(field) && options.oneof === OneofOption.UNIONS) {
+    } else if (isWithinOneOfThatShouldBeUnion(options, field)) {
       // oneofs in a union are only output as `oneof name = ...`
       let oneofName = maybeSnakeToCamel(messageDesc.oneofDecl[field.oneofIndex].name, options);
       func = func.addStatement(
-        `obj.%L = message.%L?.$case === '%L' && %L`,
-        fieldName,
+        `message.%L?.$case === '%L' && (obj.%L = %L)`,
         oneofName,
+        fieldName,
         fieldName,
         readSnippet(`message.${oneofName}?.${fieldName}`)
       );
     } else {
-      func = func.addStatement('obj.%L = %L', fieldName, readSnippet(`message.${fieldName}`));
+      func = func.addStatement(
+        'message.%L !== undefined && (obj.%L = %L)',
+        fieldName,
+        fieldName,
+        readSnippet(`message.${fieldName}`)
+      );
     }
   });
   return func.addStatement('return obj');
@@ -1105,10 +1122,10 @@ function generateFromPartial(
           if (isPrimitive(valueType)) {
             if (isBytes(valueType)) {
               return CodeBlock.of('%L', from);
+            } else if (isEnum(valueType)) {
+              return CodeBlock.of('%L as number', from);
             } else {
-              const cstr = capitalize(
-                basicTypeName(typeMap, FieldDescriptorProto.create({ type: valueType.type }), options).toString()
-              );
+              const cstr = capitalize(basicTypeName(typeMap, valueType, options).toString());
               return CodeBlock.of('%L(%L)', cstr, from);
             }
           } else if (isTimestamp(valueType)) {
@@ -1145,7 +1162,7 @@ function generateFromPartial(
           .addStatement(`message.%L.push(%L)`, fieldName, readSnippet('e'))
           .endControlFlow();
       }
-    } else if (isWithinOneOf(field) && options.oneof === OneofOption.UNIONS) {
+    } else if (isWithinOneOfThatShouldBeUnion(options, field)) {
       let oneofName = maybeSnakeToCamel(messageDesc.oneofDecl[field.oneofIndex].name, options);
       func = func
         .beginControlFlow(
@@ -1178,12 +1195,7 @@ function generateFromPartial(
       }
     }
 
-    // set the default value (TODO Support bytes)
-    if (
-      !isRepeated(field) &&
-      field.type !== FieldDescriptorProto.Type.TYPE_BYTES &&
-      options.oneof !== OneofOption.UNIONS
-    ) {
+    if (!isRepeated(field) && options.oneof !== OneofOption.UNIONS) {
       func = func.nextControlFlow('else');
       func = func.addStatement(
         `message.%L = %L`,

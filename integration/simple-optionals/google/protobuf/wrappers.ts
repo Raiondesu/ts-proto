@@ -1,5 +1,5 @@
 import * as Long from 'long';
-import { Writer, Reader } from 'protobufjs/minimal';
+import { Writer, Reader, util, configure } from 'protobufjs/minimal';
 
 
 /**
@@ -194,7 +194,7 @@ export const DoubleValue = {
   },
   toJSON(message: DoubleValue): unknown {
     const obj: any = {};
-    obj.value = message.value || 0;
+    message.value !== undefined && (obj.value = message.value);
     return obj;
   },
 };
@@ -241,7 +241,7 @@ export const FloatValue = {
   },
   toJSON(message: FloatValue): unknown {
     const obj: any = {};
-    obj.value = message.value || 0;
+    message.value !== undefined && (obj.value = message.value);
     return obj;
   },
 };
@@ -288,7 +288,7 @@ export const Int64Value = {
   },
   toJSON(message: Int64Value): unknown {
     const obj: any = {};
-    obj.value = message.value || 0;
+    message.value !== undefined && (obj.value = message.value);
     return obj;
   },
 };
@@ -335,7 +335,7 @@ export const UInt64Value = {
   },
   toJSON(message: UInt64Value): unknown {
     const obj: any = {};
-    obj.value = message.value || 0;
+    message.value !== undefined && (obj.value = message.value);
     return obj;
   },
 };
@@ -382,7 +382,7 @@ export const Int32Value = {
   },
   toJSON(message: Int32Value): unknown {
     const obj: any = {};
-    obj.value = message.value || 0;
+    message.value !== undefined && (obj.value = message.value);
     return obj;
   },
 };
@@ -429,7 +429,7 @@ export const UInt32Value = {
   },
   toJSON(message: UInt32Value): unknown {
     const obj: any = {};
-    obj.value = message.value || 0;
+    message.value !== undefined && (obj.value = message.value);
     return obj;
   },
 };
@@ -476,7 +476,7 @@ export const BoolValue = {
   },
   toJSON(message: BoolValue): unknown {
     const obj: any = {};
-    obj.value = message.value || false;
+    message.value !== undefined && (obj.value = message.value);
     return obj;
   },
 };
@@ -523,7 +523,7 @@ export const StringValue = {
   },
   toJSON(message: StringValue): unknown {
     const obj: any = {};
-    obj.value = message.value || "";
+    message.value !== undefined && (obj.value = message.value);
     return obj;
   },
 };
@@ -561,15 +561,22 @@ export const BytesValue = {
     const message = { ...baseBytesValue } as BytesValue;
     if (object.value !== undefined && object.value !== null) {
       message.value = object.value;
+    } else {
+      message.value = new Uint8Array();
     }
     return message;
   },
   toJSON(message: BytesValue): unknown {
     const obj: any = {};
-    obj.value = message.value !== undefined ? base64FromBytes(message.value) : undefined;
+    message.value !== undefined && (obj.value = base64FromBytes(message.value !== undefined ? message.value : new Uint8Array()));
     return obj;
   },
 };
+
+if (util.Long !== Long as any) {
+  util.Long = Long as any;
+  configure();
+}
 
 interface WindowBase64 {
   atob(b64: string): string;

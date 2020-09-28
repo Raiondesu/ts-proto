@@ -1,7 +1,9 @@
 import { google } from '../build/pbjs';
 import { CodeBlock, Member, TypeName, TypeNames } from 'ts-poet';
-import { Options, visit, LongOption, EnvOption, OneofOption } from './main';
+import { EnvOption, LongOption, OneofOption, Options, visit } from './main';
 import { fail } from './utils';
+import SourceInfo from './sourceInfo';
+import { camelCase } from './case';
 import FieldDescriptorProto = google.protobuf.FieldDescriptorProto;
 import CodeGeneratorRequest = google.protobuf.compiler.CodeGeneratorRequest;
 import EnumDescriptorProto = google.protobuf.EnumDescriptorProto;
@@ -9,8 +11,6 @@ import FileDescriptorProto = google.protobuf.FileDescriptorProto;
 import DescriptorProto = google.protobuf.DescriptorProto;
 import MethodDescriptorProto = google.protobuf.MethodDescriptorProto;
 import ServiceDescriptorProto = google.protobuf.ServiceDescriptorProto;
-import SourceInfo from './sourceInfo';
-import { camelCase } from './case';
 
 /** Based on https://github.com/dcodeIO/protobuf.js/blob/master/src/types.js#L37. */
 export function basicWireType(type: FieldDescriptorProto.Type): number {
@@ -214,6 +214,11 @@ export function defaultValue(typeMap: TypeMap, field: FieldDescriptorProto, opti
     case FieldDescriptorProto.Type.TYPE_STRING:
       return '""';
     case FieldDescriptorProto.Type.TYPE_BYTES:
+      if (options.env === EnvOption.NODE) {
+        return 'new Buffer(0)';
+      } else {
+        return 'new Uint8Array()';
+      }
     case FieldDescriptorProto.Type.TYPE_MESSAGE:
     default:
       return 'undefined';
@@ -263,6 +268,10 @@ export function isEnum(field: FieldDescriptorProto): boolean {
 
 export function isWithinOneOf(field: FieldDescriptorProto): boolean {
   return field.hasOwnProperty('oneofIndex');
+}
+
+export function isWithinOneOfThatShouldBeUnion(options: Options, field: FieldDescriptorProto): boolean {
+  return isWithinOneOf(field) && options.oneof === OneofOption.UNIONS && !field.proto3Optional;
 }
 
 export function isRepeated(field: FieldDescriptorProto): boolean {
@@ -390,7 +399,8 @@ export function toTypeName(
   // union with `undefined` here, either.
   if (
     (!isWithinOneOf(field) && isMessage(field) && !options.useOptionals) ||
-    (isWithinOneOf(field) && options.oneof === OneofOption.PROPERTIES)
+    (isWithinOneOf(field) && options.oneof === OneofOption.PROPERTIES) ||
+    (isWithinOneOf(field) && field.proto3Optional)
   ) {
     return TypeNames.unionType(type, TypeNames.UNDEFINED);
   }
