@@ -430,9 +430,9 @@ export function detectMapType(
 
 export function requestType(typeMap: TypeMap, methodDesc: MethodDescriptorProto, options: Options): TypeName {
   let typeName = messageToTypeName(typeMap, methodDesc.inputType, options);
-  if (methodDesc.clientStreaming) {
-    return TypeNames.anyType('Observable@rxjs').param(typeName);
-  }
+  // if (methodDesc.clientStreaming) {
+  //   return TypeNames.anyType('Observable@rxjs').param(typeName);
+  // }
   return typeName;
 }
 
@@ -445,7 +445,7 @@ export function responsePromise(typeMap: TypeMap, methodDesc: MethodDescriptorPr
 }
 
 export function responseObservable(typeMap: TypeMap, methodDesc: MethodDescriptorProto, options: Options): TypeName {
-  return TypeNames.anyType('Observable@rxjs').param(responseType(typeMap, methodDesc, options));
+  return responseType(typeMap, methodDesc, options);//TypeNames.anyType('Observable@rxjs').param(responseType(typeMap, methodDesc, options));
 }
 
 export interface BatchMethod {
