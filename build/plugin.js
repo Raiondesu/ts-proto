@@ -7,6 +7,7 @@ const main_1 = require("./main");
 const types_1 = require("./types");
 var CodeGeneratorRequest = pbjs_1.google.protobuf.compiler.CodeGeneratorRequest;
 var CodeGeneratorResponse = pbjs_1.google.protobuf.compiler.CodeGeneratorResponse;
+var Feature = pbjs_1.google.protobuf.compiler.CodeGeneratorResponse.Feature;
 // this would be the plugin called by the protoc compiler
 async function main() {
     const stdin = await utils_1.readToBuffer(process.stdin);
@@ -21,7 +22,7 @@ async function main() {
             content: prefixDisableLinter(spec),
         });
     });
-    const response = new CodeGeneratorResponse({ file: files });
+    const response = new CodeGeneratorResponse({ file: files, supportedFeatures: Feature.FEATURE_PROTO3_OPTIONAL });
     const buffer = CodeGeneratorResponse.encode(response).finish();
     const write = util_1.promisify(process.stdout.write).bind(process.stdout);
     await write(Buffer.from(buffer));

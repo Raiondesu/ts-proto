@@ -1,13 +1,13 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.detectBatchMethod = exports.responseObservable = exports.responsePromise = exports.responseType = exports.requestType = exports.detectMapType = exports.toTypeName = exports.getEnumMethod = exports.messageToTypeName = exports.valueTypeName = exports.isEmptyType = exports.isValueType = exports.isTimestamp = exports.isMapType = exports.isLong = exports.isRepeated = exports.isWithinOneOf = exports.isEnum = exports.isMessage = exports.isBytes = exports.isPrimitive = exports.createTypeMap = exports.defaultValue = exports.packedType = exports.toReaderCall = exports.basicTypeName = exports.basicLongWireType = exports.basicWireType = void 0;
+exports.detectBatchMethod = exports.responseObservable = exports.responsePromise = exports.responseType = exports.requestType = exports.detectMapType = exports.toTypeName = exports.getEnumMethod = exports.messageToTypeName = exports.valueTypeName = exports.isEmptyType = exports.isValueType = exports.isTimestamp = exports.isMapType = exports.isLong = exports.isRepeated = exports.isWithinOneOfThatShouldBeUnion = exports.isWithinOneOf = exports.isEnum = exports.isMessage = exports.isBytes = exports.isPrimitive = exports.createTypeMap = exports.defaultValue = exports.packedType = exports.toReaderCall = exports.basicTypeName = exports.basicLongWireType = exports.basicWireType = void 0;
 const pbjs_1 = require("../build/pbjs");
 const ts_poet_1 = require("ts-poet");
 const main_1 = require("./main");
 const utils_1 = require("./utils");
-var FieldDescriptorProto = pbjs_1.google.protobuf.FieldDescriptorProto;
 const sourceInfo_1 = require("./sourceInfo");
 const case_1 = require("./case");
+var FieldDescriptorProto = pbjs_1.google.protobuf.FieldDescriptorProto;
 /** Based on https://github.com/dcodeIO/protobuf.js/blob/master/src/types.js#L37. */
 function basicWireType(type) {
     switch (type) {
@@ -212,6 +212,12 @@ function defaultValue(typeMap, field, options) {
         case FieldDescriptorProto.Type.TYPE_STRING:
             return '""';
         case FieldDescriptorProto.Type.TYPE_BYTES:
+            if (options.env === main_1.EnvOption.NODE) {
+                return 'new Buffer(0)';
+            }
+            else {
+                return 'new Uint8Array()';
+            }
         case FieldDescriptorProto.Type.TYPE_MESSAGE:
         default:
             return 'undefined';
@@ -255,6 +261,10 @@ function isWithinOneOf(field) {
     return field.hasOwnProperty('oneofIndex');
 }
 exports.isWithinOneOf = isWithinOneOf;
+function isWithinOneOfThatShouldBeUnion(options, field) {
+    return isWithinOneOf(field) && options.oneof === main_1.OneofOption.UNIONS && !field.proto3Optional;
+}
+exports.isWithinOneOfThatShouldBeUnion = isWithinOneOfThatShouldBeUnion;
 function isRepeated(field) {
     return field.label === FieldDescriptorProto.Label.LABEL_REPEATED;
 }
@@ -359,7 +369,8 @@ function toTypeName(typeMap, messageDesc, field, options) {
     // clause, spelling each option out inside a large type union. No need for
     // union with `undefined` here, either.
     if ((!isWithinOneOf(field) && isMessage(field) && !options.useOptionals) ||
-        (isWithinOneOf(field) && options.oneof === main_1.OneofOption.PROPERTIES)) {
+        (isWithinOneOf(field) && options.oneof === main_1.OneofOption.PROPERTIES) ||
+        (isWithinOneOf(field) && field.proto3Optional)) {
         return ts_poet_1.TypeNames.unionType(type, ts_poet_1.TypeNames.UNDEFINED);
     }
     return type;
@@ -382,9 +393,9 @@ function detectMapType(typeMap, messageDesc, fieldDesc, options) {
 exports.detectMapType = detectMapType;
 function requestType(typeMap, methodDesc, options) {
     let typeName = messageToTypeName(typeMap, methodDesc.inputType, options);
-    if (methodDesc.clientStreaming) {
-        return ts_poet_1.TypeNames.anyType('Observable@rxjs').param(typeName);
-    }
+    // if (methodDesc.clientStreaming) {
+    //   return TypeNames.anyType('Observable@rxjs').param(typeName);
+    // }
     return typeName;
 }
 exports.requestType = requestType;
@@ -397,7 +408,7 @@ function responsePromise(typeMap, methodDesc, options) {
 }
 exports.responsePromise = responsePromise;
 function responseObservable(typeMap, methodDesc, options) {
-    return ts_poet_1.TypeNames.anyType('Observable@rxjs').param(responseType(typeMap, methodDesc, options));
+    return responseType(typeMap, methodDesc, options); //TypeNames.anyType('Observable@rxjs').param(responseType(typeMap, methodDesc, options));
 }
 exports.responseObservable = responseObservable;
 function detectBatchMethod(typeMap, fileDesc, serviceDesc, methodDesc, options) {

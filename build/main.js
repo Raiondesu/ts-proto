@@ -148,7 +148,16 @@ function generateFile(typeMap, fileDesc, parameter) {
     return file;
 }
 exports.generateFile = generateFile;
-function addLongUtilityMethod(file, options) {
+function addLongUtilityMethod(_file, options) {
+    // Regardless of which `forceLong` config option we're using, we always use
+    // the `long` library to either represent or at least sanity-check 64-bit values
+    const util = ts_poet_1.TypeNames.anyType('util@protobufjs/minimal');
+    const configure = ts_poet_1.TypeNames.anyType('configure@protobufjs/minimal');
+    let file = _file.addCode(ts_poet_1.CodeBlock.empty()
+        .beginControlFlow('if (%T.Long !== %T as any)', util, 'Long*long')
+        .addStatement('%T.Long = %T as any', util, 'Long*long')
+        .addStatement('%T()', configure)
+        .endControlFlow());
     if (options.forceLong === LongOption.LONG) {
         return file.addFunction(ts_poet_1.FunctionSpec.create('numberToLong')
             .addParameter('number', 'number')
@@ -323,7 +332,7 @@ function generateEnumToJson(fullName, enumDesc) {
 }
 // When useOptionals=true, non-scalar fields are translated into optional properties.
 function isOptionalProperty(field, options) {
-    return options.useOptionals && types_1.isMessage(field) && !types_1.isRepeated(field);
+    return (options.useOptionals && types_1.isMessage(field) && !types_1.isRepeated(field)) || field.proto3Optional;
 }
 // Create the interface with properties
 function generateInterfaceDeclaration(typeMap, fullName, messageDesc, sourceInfo, options) {
@@ -333,7 +342,7 @@ function generateInterfaceDeclaration(typeMap, fullName, messageDesc, sourceInfo
     messageDesc.field.forEach((fieldDesc, index) => {
         // When oneof=unions, we generate a single property with an algebraic
         // datatype (ADT) per `oneof` clause.
-        if (options.oneof === OneofOption.UNIONS && types_1.isWithinOneOf(fieldDesc)) {
+        if (types_1.isWithinOneOfThatShouldBeUnion(options, fieldDesc)) {
             const { oneofIndex } = fieldDesc;
             if (!processedOneofs.has(oneofIndex)) {
                 processedOneofs.add(oneofIndex);
@@ -387,7 +396,7 @@ function generateBaseInstance(typeMap, fullName, messageDesc, options) {
         .filterNot(types_1.isWithinOneOf)
         .forEach((field) => {
         let val = types_1.defaultValue(typeMap, field, options);
-        if (val === 'undefined') {
+        if (val === 'undefined' || types_1.isBytes(field)) {
             return;
         }
         initialValue = initialValue.addHashEntry(case_1.maybeSnakeToCamel(field.name, options), val);
@@ -512,7 +521,7 @@ function generateDecode(typeMap, fullName, messageDesc, options) {
                     .endControlFlow();
             }
         }
-        else if (types_1.isWithinOneOf(field) && options.oneof === OneofOption.UNIONS) {
+        else if (types_1.isWithinOneOfThatShouldBeUnion(options, field)) {
             let oneofName = case_1.maybeSnakeToCamel(messageDesc.oneofDecl[field.oneofIndex].name, options);
             func = func.addStatement(`message.%L = {$case: '%L', %L: %L}`, oneofName, fieldName, fieldName, readSnippet);
         }
@@ -580,14 +589,21 @@ function generateEncode(typeMap, fullName, messageDesc, options) {
                     .addStatement('writer.ldelim()');
             }
         }
-        else if (types_1.isWithinOneOf(field) && options.oneof === OneofOption.UNIONS) {
+        else if (types_1.isWithinOneOfThatShouldBeUnion(options, field)) {
             let oneofName = case_1.maybeSnakeToCamel(messageDesc.oneofDecl[field.oneofIndex].name, options);
             func = func
-                .beginControlFlow(`if (message.%L?.$case === '%L' && message.%L?.%L !== %L)`, oneofName, fieldName, oneofName, fieldName, types_1.defaultValue(typeMap, field, options))
+                .beginControlFlow(`if (message.%L?.$case === '%L')`, oneofName, fieldName)
                 .addStatement('%L', writeSnippet(`message.${oneofName}.${fieldName}`))
                 .endControlFlow();
         }
-        else if (types_1.isWithinOneOf(field) || types_1.isMessage(field)) {
+        else if (types_1.isWithinOneOf(field)) {
+            // Oneofs don't have a default value check b/c they need to denote which-oneof presence
+            func = func
+                .beginControlFlow('if (message.%L !== undefined)', fieldName)
+                .addStatement('%L', writeSnippet(`message.${fieldName}`))
+                .endControlFlow();
+        }
+        else if (types_1.isMessage(field)) {
             func = func
                 .beginControlFlow('if (message.%L !== undefined && message.%L !== %L)', fieldName, fieldName, types_1.defaultValue(typeMap, field, options))
                 .addStatement('%L', writeSnippet(`message.${fieldName}`))
@@ -664,8 +680,11 @@ function generateFromJson(typeMap, fullName, messageDesc, options) {
                                 return ts_poet_1.CodeBlock.of('bytesFromBase64(%L as string)', from);
                             }
                         }
+                        else if (types_1.isEnum(valueType)) {
+                            return ts_poet_1.CodeBlock.of('%L as number', from);
+                        }
                         else {
-                            const cstr = case_1.capitalize(types_1.basicTypeName(typeMap, FieldDescriptorProto.create({ type: valueType.type }), options).toString());
+                            const cstr = case_1.capitalize(types_1.basicTypeName(typeMap, valueType, options).toString());
                             return ts_poet_1.CodeBlock.of('%L(%L)', cstr, from);
                         }
                     }
@@ -700,7 +719,7 @@ function generateFromJson(typeMap, fullName, messageDesc, options) {
                     .endControlFlow();
             }
         }
-        else if (types_1.isWithinOneOf(field) && options.oneof === OneofOption.UNIONS) {
+        else if (types_1.isWithinOneOfThatShouldBeUnion(options, field)) {
             let oneofName = case_1.maybeSnakeToCamel(messageDesc.oneofDecl[field.oneofIndex].name, options);
             func = func.addStatement(`message.%L = {$case: '%L', %L: %L}`, oneofName, fieldName, fieldName, readSnippet(`object.${fieldName}`));
         }
@@ -743,7 +762,7 @@ function generateToJson(typeMap, fullName, messageDesc, options) {
                 // For map types, drill-in and then admittedly re-hard-code our per-value-type logic
                 const valueType = typeMap.get(field.typeName)[2].field[1];
                 if (types_1.isEnum(valueType)) {
-                    const toJson = types_1.getEnumMethod(typeMap, field.typeName, 'ToJSON');
+                    const toJson = types_1.getEnumMethod(typeMap, valueType.typeName, 'ToJSON');
                     return ts_poet_1.CodeBlock.of('%T(%L)', toJson, from);
                 }
                 else if (types_1.isBytes(valueType)) {
@@ -763,13 +782,18 @@ function generateToJson(typeMap, fullName, messageDesc, options) {
                 return ts_poet_1.CodeBlock.of('%L ? %T.toJSON(%L) : %L', from, types_1.basicTypeName(typeMap, field, options, { keepValueType: true }), from, types_1.defaultValue(typeMap, field, options));
             }
             else if (types_1.isBytes(field)) {
-                return ts_poet_1.CodeBlock.of('%L !== undefined ? base64FromBytes(%L) : %L', from, from, types_1.isWithinOneOf(field) ? 'undefined' : types_1.defaultValue(typeMap, field, options));
+                if (types_1.isWithinOneOf(field)) {
+                    return ts_poet_1.CodeBlock.of('%L !== undefined ? base64FromBytes(%L) : undefined', from, from);
+                }
+                else {
+                    return ts_poet_1.CodeBlock.of('base64FromBytes(%L !== undefined ? %L : %L)', from, from, types_1.defaultValue(typeMap, field, options));
+                }
             }
             else if (types_1.isLong(field) && options.forceLong === LongOption.LONG) {
                 return ts_poet_1.CodeBlock.of('(%L || %L).toString()', from, types_1.isWithinOneOf(field) ? 'undefined' : types_1.defaultValue(typeMap, field, options));
             }
             else {
-                return ts_poet_1.CodeBlock.of('%L || %L', from, types_1.isWithinOneOf(field) ? 'undefined' : types_1.defaultValue(typeMap, field, options));
+                return ts_poet_1.CodeBlock.of('%L', from);
             }
         };
         if (types_1.isMapType(typeMap, messageDesc, field, options)) {
@@ -791,13 +815,13 @@ function generateToJson(typeMap, fullName, messageDesc, options) {
                 .addStatement('obj.%L = []', fieldName)
                 .endControlFlow();
         }
-        else if (types_1.isWithinOneOf(field) && options.oneof === OneofOption.UNIONS) {
+        else if (types_1.isWithinOneOfThatShouldBeUnion(options, field)) {
             // oneofs in a union are only output as `oneof name = ...`
             let oneofName = case_1.maybeSnakeToCamel(messageDesc.oneofDecl[field.oneofIndex].name, options);
-            func = func.addStatement(`obj.%L = message.%L?.$case === '%L' && %L`, fieldName, oneofName, fieldName, readSnippet(`message.${oneofName}?.${fieldName}`));
+            func = func.addStatement(`message.%L?.$case === '%L' && (obj.%L = %L)`, oneofName, fieldName, fieldName, readSnippet(`message.${oneofName}?.${fieldName}`));
         }
         else {
-            func = func.addStatement('obj.%L = %L', fieldName, readSnippet(`message.${fieldName}`));
+            func = func.addStatement('message.%L !== undefined && (obj.%L = %L)', fieldName, fieldName, readSnippet(`message.${fieldName}`));
         }
     });
     return func.addStatement('return obj');
@@ -828,8 +852,11 @@ function generateFromPartial(typeMap, fullName, messageDesc, options) {
                         if (types_1.isBytes(valueType)) {
                             return ts_poet_1.CodeBlock.of('%L', from);
                         }
+                        else if (types_1.isEnum(valueType)) {
+                            return ts_poet_1.CodeBlock.of('%L as number', from);
+                        }
                         else {
-                            const cstr = case_1.capitalize(types_1.basicTypeName(typeMap, FieldDescriptorProto.create({ type: valueType.type }), options).toString());
+                            const cstr = case_1.capitalize(types_1.basicTypeName(typeMap, valueType, options).toString());
                             return ts_poet_1.CodeBlock.of('%L(%L)', cstr, from);
                         }
                     }
@@ -866,7 +893,7 @@ function generateFromPartial(typeMap, fullName, messageDesc, options) {
                     .endControlFlow();
             }
         }
-        else if (types_1.isWithinOneOf(field) && options.oneof === OneofOption.UNIONS) {
+        else if (types_1.isWithinOneOfThatShouldBeUnion(options, field)) {
             let oneofName = case_1.maybeSnakeToCamel(messageDesc.oneofDecl[field.oneofIndex].name, options);
             func = func
                 .beginControlFlow(`if (object.%L?.$case === '%L' && object.%L?.%L !== undefined && object.%L?.%L !== null)`, oneofName, fieldName, oneofName, fieldName, oneofName, fieldName)
@@ -881,10 +908,7 @@ function generateFromPartial(typeMap, fullName, messageDesc, options) {
                 func = func.addStatement(`message.%L = %L`, fieldName, readSnippet(`object.${fieldName}`));
             }
         }
-        // set the default value (TODO Support bytes)
-        if (!types_1.isRepeated(field) &&
-            field.type !== FieldDescriptorProto.Type.TYPE_BYTES &&
-            options.oneof !== OneofOption.UNIONS) {
+        if (!types_1.isRepeated(field) && options.oneof !== OneofOption.UNIONS) {
             func = func.nextControlFlow('else');
             func = func.addStatement(`message.%L = %L`, fieldName, types_1.isWithinOneOf(field) ? 'undefined' : types_1.defaultValue(typeMap, field, options));
         }
