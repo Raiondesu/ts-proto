@@ -104,10 +104,6 @@ export function generateFile(typeMap: TypeMap, fileDesc: FileDescriptorProto, pa
   const moduleName = fileDesc.name.replace('.proto', '.ts');
   let file = FileSpec.create(moduleName);
 
-  file = file.addCode(
-    CodeBlock.empty().add('//@ts-ignore\n')
-  );
-
   const sourceInfo = SourceInfo.fromDescriptor(fileDesc);
 
   // Syntax, unlike most fields, is not repeated and thus does not use an index
@@ -323,10 +319,8 @@ function bytesFromBase64(b64: string): Uint8Array {
 }
 
 function base64FromBytes(arr: Uint8Array): string {
-  const bin: string[] = [];
-  for (let i = 0; i < arr.byteLength; ++i) {
-    bin.push(String.fromCharCode(arr[i]));
-  }
+  const bin: string[] = Array.from(arr).map(_ => String.fromCharCode(_));
+
   return btoa(bin.join(''));
 }`)
   );

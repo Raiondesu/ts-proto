@@ -45,7 +45,6 @@ function generateFile(typeMap, fileDesc, parameter) {
     // the package already implicitly in it, so we won't re-append/strip/etc. it out/back in.
     const moduleName = fileDesc.name.replace('.proto', '.ts');
     let file = ts_poet_1.FileSpec.create(moduleName);
-    file = file.addCode(ts_poet_1.CodeBlock.empty().add('//@ts-ignore\n'));
     const sourceInfo = sourceInfo_1.default.fromDescriptor(fileDesc);
     // Syntax, unlike most fields, is not repeated and thus does not use an index
     const headerComment = sourceInfo.lookup(sourceInfo_1.Fields.file.syntax, undefined);
@@ -208,10 +207,8 @@ function bytesFromBase64(b64: string): Uint8Array {
 }
 
 function base64FromBytes(arr: Uint8Array): string {
-  const bin: string[] = [];
-  for (let i = 0; i < arr.byteLength; ++i) {
-    bin.push(String.fromCharCode(arr[i]));
-  }
+  const bin: string[] = Array.from(arr).map(_ => String.fromCharCode(_));
+
   return btoa(bin.join(''));
 }`));
 }
