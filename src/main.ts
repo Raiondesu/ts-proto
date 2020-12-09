@@ -50,6 +50,7 @@ import {
   generateGrpcMethodDesc,
   generateGrpcServiceDesc,
 } from './generate-grpc-web';
+import { addListener } from 'process';
 
 export enum LongOption {
   NUMBER = 'number',
@@ -102,6 +103,10 @@ export function generateFile(typeMap: TypeMap, fileDesc: FileDescriptorProto, pa
   // the package already implicitly in it, so we won't re-append/strip/etc. it out/back in.
   const moduleName = fileDesc.name.replace('.proto', '.ts');
   let file = FileSpec.create(moduleName);
+
+  file.addCode(
+    CodeBlock.empty().add('//@ts-ignore\n')
+  );
 
   const sourceInfo = SourceInfo.fromDescriptor(fileDesc);
 
