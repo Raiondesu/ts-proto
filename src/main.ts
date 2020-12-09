@@ -50,6 +50,7 @@ import {
   generateGrpcMethodDesc,
   generateGrpcServiceDesc,
 } from './generate-grpc-web';
+import { addListener } from 'process';
 
 export enum LongOption {
   NUMBER = 'number',
@@ -221,7 +222,7 @@ export function generateFile(typeMap: TypeMap, fileDesc: FileDescriptorProto, pa
     file = addTimestampMethods(file, options);
   }
 
-  const initialOutput = file.toString();
+  const initialOutput = '//@ts-ignore\n' + file.toString();
   // This `.includes(...)` is a pretty fuzzy way of detecting whether we use these utility
   // methods (to prevent outputting them if its not necessary). In theory, we should be able
   // to lean on the code generation library more to do this sort of "output only if used",
