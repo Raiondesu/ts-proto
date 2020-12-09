@@ -104,7 +104,7 @@ export function generateFile(typeMap: TypeMap, fileDesc: FileDescriptorProto, pa
   const moduleName = fileDesc.name.replace('.proto', '.ts');
   let file = FileSpec.create(moduleName);
 
-  file.addCode(
+  file = file.addCode(
     CodeBlock.empty().add('//@ts-ignore\n')
   );
 
